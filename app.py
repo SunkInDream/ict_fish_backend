@@ -2,7 +2,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
-from models import db, User, Comment
+from models import db, User, Comment, TankStatus, DeviceSetting
 
 
 def create_app():
@@ -15,7 +15,7 @@ def create_app():
     db.init_app(app)
     CORS(app)
 
-    # 初始化数据库
+    # 初始化数据库（如果表不存在就创建）
     with app.app_context():
         db.create_all()
 
@@ -23,8 +23,7 @@ def create_app():
     def ping():
         return jsonify({"msg": "pong"}), 200
 
-    # 注册接口：POST /api/register
-    # 请求体：{"account": "...", "password": "...", "name": "...", 其他可选字段}
+    # ====================== 注册 ======================
     @app.route("/api/register", methods=["POST"])
     def register():
         data = request.get_json() or {}
@@ -32,17 +31,15 @@ def create_app():
         account = data.get("account")
         password = data.get("password")
         name = data.get("name")
-
         phone = data.get("phone")
         gender = data.get("gender")
-        birthday_str = data.get("birthday")  # 预期格式：YYYY-MM-DD
+        birthday_str = data.get("birthday")
         region = data.get("region")
         avatar = data.get("avatar")
 
         if not account or not password or not name:
             return jsonify({"error": "account, password and name are required"}), 400
 
-        # 账号是否已存在
         if User.query.filter_by(account=account).first():
             return jsonify({"error": "account already exists"}), 409
 
@@ -67,14 +64,9 @@ def create_app():
         db.session.add(user)
         db.session.commit()
 
-        return jsonify(
-            {
-                "id": user.id,
-                "name": user.name,
-            }
-        ), 201
+        return jsonify({"id": user.id, "name": user.name}), 201
 
-    # 登录接口：POST /api/login
+    # ====================== 登录 ======================
     @app.route("/api/login", methods=["POST"])
     def login():
         data = request.get_json() or {}
@@ -91,21 +83,16 @@ def create_app():
         if not user.check_password(password):
             return jsonify({"error": "wrong password"}), 401
 
-        return jsonify(
-            {
-                "id": user.id,
-                "name": user.name,
-            }
-        ), 200
+        return jsonify({"id": user.id, "name": user.name}), 200
 
-    # 获取用户信息：GET /api/users/<id>
+    # ====================== 获取用户信息 ======================
     @app.route("/api/users/<int:user_id>", methods=["GET"])
     def get_user(user_id):
         user = User.query.get(user_id)
         if not user:
             return jsonify({"error": "user not found"}), 404
 
-        data = {
+        return jsonify({
             "id": user.id,
             "avatar": user.avatar_url,
             "name": user.name,
@@ -114,8 +101,99 @@ def create_app():
             "gender": user.gender,
             "birthday": user.birthday.isoformat() if user.birthday else None,
             "region": user.region,
-        }
-        return jsonify(data), 200
+        }), 200
+
+    # ====================== 获取鱼缸最新状态 ======================
+    @app.route("/api/tank/status", methods=["GET"])
+    def get_tank_status():
+        status = TankStatus.query.order_by(TankStatus.created_at.desc()).first()
+
+        if not status:
+            # 没有数据时返回默认值
+            return jsonify({
+                "update_time": None,
+                "temp": None,
+                "ph": None,
+                "tds": None,
+                "temp_status": "normal",
+                "ph_status": "normal",
+                "tds_status": "normal",
+            }), 200
+
+        return jsonify({
+            "update_time": status.created_at.isoformat(),
+            "temp": status.temp,
+            "ph": status.ph,
+            "tds": status.tds,
+            "temp_status": status.temp_status,
+            "ph_status": status.ph_status,
+            "tds_status": status.tds_status,
+        }), 200
+
+    # ====================== 写入一条鱼缸状态 ======================
+    @app.route("/api/tank/status", methods=["POST"])
+    def create_tank_status():
+        data = request.get_json() or {}
+
+        temp = data.get("temp")
+        ph = data.get("ph")
+        tds = data.get("tds")
+        device_id = data.get("device_id")
+
+        def judge_temp(v):
+            if v is None:
+                return "normal"
+            return "abnormal" if v < 5 or v > 40 else "normal"
+
+        def judge_ph(v):
+            if v is None:
+                return "normal"
+            return "abnormal" if v < 6.5 or v > 8.5 else "normal"
+
+        def judge_tds(v):
+            if v is None:
+                return "normal"
+            return "abnormal" if v < 0 or v > 1000 else "normal"
+
+        status = TankStatus(
+            device_id=device_id,
+            temp=temp,
+            ph=ph,
+            tds=tds,
+            temp_status=judge_temp(temp),
+            ph_status=judge_ph(ph),
+            tds_status=judge_tds(tds),
+        )
+
+        db.session.add(status)
+        db.session.commit()
+
+        return jsonify({"msg": "created"}), 201
+
+    # ====================== 记录设备设置 ======================
+    @app.route("/api/tank/settings", methods=["POST"])
+    def create_setting():
+        data = request.get_json() or {}
+
+        setting_name = data.get("setting_name")
+        setting_type = data.get("setting_type")
+        value = data.get("value")
+        user_id = data.get("user_id")
+
+        if not setting_name or not setting_type or value is None:
+            return jsonify({"error": "setting_name, setting_type and value are required"}), 400
+
+        record = DeviceSetting(
+            user_id=user_id,
+            setting_name=setting_name,
+            setting_type=setting_type,
+            value=str(value),
+        )
+
+        db.session.add(record)
+        db.session.commit()
+
+        return jsonify({"msg": "setting saved"}), 201
 
     return app
 

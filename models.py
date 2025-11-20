@@ -103,3 +103,41 @@ class ActivityLog(TimestampMixin, db.Model):
     action = db.Column(db.String(50), nullable=False)
     # 额外信息（JSON 字符串）
     detail = db.Column(db.Text, nullable=True)
+
+class TankStatus(TimestampMixin, db.Model):
+    """鱼缸状态表：保存每次采集到的水温/PH/TDS 等"""
+    __tablename__ = "tank_status"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    # 设备 ID（预留）
+    device_id = db.Column(db.String(100), nullable=True)
+
+    # 传感器数据
+    temp = db.Column(db.Float, nullable=True)      # 水温
+    ph = db.Column(db.Float, nullable=True)        # PH 值
+    tds = db.Column(db.Float, nullable=True)       # TDS 值
+
+    # 状态（normal / abnormal）
+    temp_status = db.Column(db.String(20), default="normal")
+    ph_status = db.Column(db.String(20), default="normal")
+    tds_status = db.Column(db.String(20), default="normal")
+
+
+class DeviceSetting(TimestampMixin, db.Model):
+    """设备参数设置记录表：记录每次设置的参数"""
+    __tablename__ = "device_settings"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    # 哪个用户设置的（可选）
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    # 设置项，比如：LED开关 / LED亮度 / LED颜色 / 水泵开关 / 采样频率
+    setting_name = db.Column(db.String(50), nullable=False)
+
+    # 设置类型：number / boolean / text / select
+    setting_type = db.Column(db.String(20), nullable=False)
+
+    # 设置的具体值（统一保存成字符串）
+    value = db.Column(db.String(100), nullable=False)
