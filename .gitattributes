@@ -1,1 +1,5 @@
-Model.zip filter=lfs diff=lfs merge=lfs -text
+<<<<<<< HEAD
+=======
+*.ext filter=lfs diff=lfs merge=lfs -text
+*.zip filter=lfs diff=lfs merge=lfs -text
+>>>>>>> b0dc892dfcc0d5687480ec4355c8e54286e7c0a8
